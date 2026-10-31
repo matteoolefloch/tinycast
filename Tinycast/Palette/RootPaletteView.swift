@@ -16,6 +16,7 @@ struct RootPaletteView: View {
     @Environment(DictionarySession.self) private var dictionary
     @Environment(MenuSearchSession.self) private var menuSearch
     @Environment(WindowSwitchSession.self) private var windowSwitch
+    @Environment(KillProcessSession.self) private var killProcess
     @Environment(CalendarStore.self) private var calendarStore
     /// Observed so the join card's countdown redraws on the minute boundary.
     @Environment(MeetingClock.self) private var meetingClock
@@ -86,6 +87,8 @@ struct RootPaletteView: View {
                 session: menuSearch, core: core, vm: vm, openActions: openActions)
         case .switchWindows:
             return WindowSwitchScreen(session: windowSwitch, core: core)
+        case .killProcess:
+            return KillProcessScreen(session: killProcess, core: core)
         case .rooms:
             return RoomsScreen(coordinator: core.roomCoordinator, session: core.roomSession, vm: vm)
         case .roomWindows:
@@ -412,6 +415,7 @@ struct RootPaletteView: View {
                 if vm.mode == .dictionary { dictionary.lookUp(vm.query) }
                 if vm.mode == .menuSearch { menuSearch.filter(vm.query) }
                 if vm.mode == .switchWindows { windowSwitch.filter(vm.query) }
+                if vm.mode == .killProcess { killProcess.filter(vm.query) }
                 // A command that took over the search text filters its own list.
                 if vm.mode == .extensionCommand, let handler = extensionScreen.searchTextHandler {
                     extensions.dispatch(handler: handler, arguments: [vm.query])
@@ -454,6 +458,7 @@ struct RootPaletteView: View {
                 }
                 if vm.mode != .menuSearch { menuSearch.reset() }
                 if vm.mode != .switchWindows { windowSwitch.reset() }
+                if vm.mode != .killProcess { killProcess.reset() }
                 if vm.mode != .meetingDetails { calendarStore.clearDetails() }
                 if vm.mode != .rooms, vm.mode != .roomWindows { core.roomCoordinator.screensDidClose() }
                 // Leaving the screen any other way than Escape still ends the command's session.

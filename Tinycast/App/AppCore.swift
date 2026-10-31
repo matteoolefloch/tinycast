@@ -64,6 +64,7 @@ final class AppCore {
     let dictionary = DictionarySession()
     let menuSearch = MenuSearchSession()
     let windowSwitch = WindowSwitchSession()
+    let killProcess = KillProcessSession()
     let activationPolicy = ActivationPolicy()
     let uninstall = UninstallSession()
     let notesStore: NotesStore
@@ -119,7 +120,7 @@ final class AppCore {
     @ObservationIgnored private(set) lazy var paletteCoordinator = PaletteCoordinator(
         palette: palette, settings: settings, appIndex: appIndex,
         fileSearch: fileSearch, menuSearch: menuSearch, windowSwitch: windowSwitch,
-        windowController: windowController)
+        killProcess: killProcess, windowController: windowController)
     /// Its own window and lifecycle: neither coordinator shows or closes the other's surface.
     @ObservationIgnored private(set) lazy var settingsCoordinator = SettingsCoordinator(core: self)
     @ObservationIgnored private(set) lazy var onboardingCoordinator = OnboardingCoordinator(
@@ -214,6 +215,8 @@ final class AppCore {
     @ObservationIgnored private(set) lazy var windowSwitchCoordinator = WindowSwitchCoordinator(
         settings: settings, appIndex: appIndex, session: windowSwitch, palette: palette,
         paletteCoordinator: paletteCoordinator, core: self)
+    @ObservationIgnored private(set) lazy var killProcessCoordinator = KillProcessCoordinator(
+        session: killProcess, paletteCoordinator: paletteCoordinator, core: self)
     @ObservationIgnored private(set) lazy var cameraCoordinator = CameraCoordinator(core: self)
     @ObservationIgnored private(set) lazy var dictionaryCoordinator = DictionaryCoordinator(
         paletteCoordinator: paletteCoordinator)
@@ -342,6 +345,7 @@ final class AppCore {
                 switch mode {
                 case .menuSearch: self?.menuSearchCoordinator.load()
                 case .switchWindows: self?.windowSwitchCoordinator.load()
+                case .killProcess: self?.killProcessCoordinator.load()
                 case .rooms, .roomWindows: self?.roomCoordinator.load()
                 default: break
                 }

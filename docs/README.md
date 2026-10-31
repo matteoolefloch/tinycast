@@ -34,6 +34,7 @@ open with an `## Invariants` section; read it before changing anything in that a
 [dictionary](features/dictionary.md) ·
 [file search](features/file-search.md) ·
 [menu search](features/menu-search.md) ·
+[kill process](features/kill-process.md) ·
 [notes](features/notes.md) ·
 [snippets](features/snippets.md) ·
 [quicklinks](features/quicklinks.md) ·

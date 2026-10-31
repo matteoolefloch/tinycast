@@ -9,6 +9,7 @@ final class PaletteCoordinator {
     private let fileSearch: FileSearchSession
     private let menuSearch: MenuSearchSession
     private let windowSwitch: WindowSwitchSession
+    private let killProcess: KillProcessSession
     private let windowController: PaletteWindowController
     /// Features whose launcher rows are read from outside Tinycast re-read them on each open.
     var onLauncherShown: (() -> Void)?
@@ -22,6 +23,7 @@ final class PaletteCoordinator {
         fileSearch: FileSearchSession,
         menuSearch: MenuSearchSession,
         windowSwitch: WindowSwitchSession,
+        killProcess: KillProcessSession,
         windowController: PaletteWindowController
     ) {
         self.palette = palette
@@ -30,6 +32,7 @@ final class PaletteCoordinator {
         self.fileSearch = fileSearch
         self.menuSearch = menuSearch
         self.windowSwitch = windowSwitch
+        self.killProcess = killProcess
         self.windowController = windowController
     }
 
@@ -100,6 +103,7 @@ final class PaletteCoordinator {
         if palette.mode == .fileSearch { fileSearch.search(palette.query) }
         if palette.mode == .menuSearch { menuSearch.filter(palette.query) }
         if palette.mode == .switchWindows { windowSwitch.filter(palette.query) }
+        if palette.mode == .killProcess { killProcess.filter(palette.query) }
         // Re-scan on open so an app uninstalled since the last scan drops out of the launcher.
         if palette.mode == .launcher {
             Task { await appIndex.refresh() }
@@ -121,6 +125,7 @@ final class PaletteCoordinator {
     func hidePalette(restoreFocus: Bool = true) {
         menuSearch.reset()
         windowSwitch.reset()
+        killProcess.reset()
         windowController.hide(restoreFocus: restoreFocus)
     }
 

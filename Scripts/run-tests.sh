@@ -123,6 +123,8 @@ run menu-search-test       $L/SearchRelevance.swift \
                            Tinycast/Features/MenuSearch/Service/*.swift
 run window-switch-test     $L/SearchRelevance.swift \
                            Tinycast/Features/WindowSwitcher/Model/*.swift
+run kill-process-test      $L/SearchRelevance.swift \
+                           Tinycast/Features/KillProcess/Model/*.swift
 run index file-search-performance $FS/Model/*.swift $FILE_INDEX
 run ranking-test           $L/SearchRelevance.swift $L/ScriptRomanization.swift \
                            $L/LauncherMatch.swift $L/LauncherRankingStore.swift

@@ -194,6 +194,8 @@ final class LauncherCoordinator {
             windowSwitchCoordinator.show()
         case .switchWindowsBackwards:
             windowSwitchCoordinator.show(backwards: true)
+        case .killProcess:
+            core.killProcessCoordinator.show()
         case .openCamera:
             dismissPalette()
             Task { await core.cameraCoordinator.show() }

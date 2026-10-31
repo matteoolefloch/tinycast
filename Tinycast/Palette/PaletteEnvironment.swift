@@ -31,6 +31,7 @@ extension View {
             .environment(core.dictionary)
             .environment(core.menuSearch)
             .environment(core.windowSwitch)
+            .environment(core.killProcess)
             .environment(core.runningApps)
             .environment(core.hotKeys)
             .environment(core.uninstall)
