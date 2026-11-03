@@ -58,7 +58,7 @@ struct KillProcessScreen: PaletteScreen {
                 title: String(localized: "Reload Processes"), systemImage: "arrow.clockwise",
                 startsSection: true, shortcut: "⌘R"
             ) {
-                coordinator.load()
+                coordinator.reload()
             })
         return PopoverMenuContent(header: entry.name, items: items)
     }
@@ -77,7 +77,7 @@ struct KillProcessScreen: PaletteScreen {
     func perform(_ shortcut: PaletteShortcut, at selection: Int) -> Bool {
         let coordinator = core.killProcessCoordinator
         if shortcut == .restart {
-            coordinator.load()
+            coordinator.reload()
             return true
         }
         guard let entry = entry(at: selection) else { return false }
@@ -105,6 +105,7 @@ struct KillProcessScreen: PaletteScreen {
         } else {
             KillProcessList(
                 entries: rows,
+                signalledPIDs: session.signalledPIDs,
                 selectedID: entry(at: selection)?.id,
                 scroll: scroll,
                 onActivate: { core.killProcessCoordinator.kill($0, with: .terminate) })

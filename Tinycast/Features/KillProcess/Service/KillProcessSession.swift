@@ -3,6 +3,10 @@ import AppKit
 @MainActor
 @Observable
 final class KillProcessSession {
+    typealias SampleOperation =
+        @Sendable (_ applications: [Int32: ProcessSampler.Application], _ selfPID: Int32) async
+        -> [ProcessEntry]
+
     enum State {
         case idle
         case loading
@@ -13,26 +17,40 @@ final class KillProcessSession {
     private(set) var snapshot: [ProcessEntry] = []
     /// The rows the list reads: ranked once per query change, so one keystroke ranks once.
     private(set) var filtered: [ProcessEntry] = []
+    /// Killed rows stay put, dimmed: removing one would slide the next process under a repeated ↵.
+    private(set) var signalledPIDs: Set<Int32> = []
 
     private var query = ""
     private var revision = 0
     @ObservationIgnored private var sampleTask: Task<Void, Never>?
+    @ObservationIgnored private let sampleOperation: SampleOperation
+
+    init() {
+        sampleOperation = { await ProcessSampler.sample(applications: $0, selfPID: $1) }
+    }
+
+    init(sampleOperation: @escaping SampleOperation) {
+        self.sampleOperation = sampleOperation
+    }
 
     /// A reload keeps the old rows up until the new sample lands, so the list never blanks.
-    func load() {
+    func load(then onLoaded: (@MainActor () -> Void)? = nil) {
         revision &+= 1
         sampleTask?.cancel()
         if snapshot.isEmpty { state = .loading }
         let revision = self.revision
         let applications = Self.runningApplications()
         let selfPID = ProcessInfo.processInfo.processIdentifier
+        let operation = sampleOperation
         sampleTask = Task { [weak self] in
-            let entries = await ProcessSampler.sample(applications: applications, selfPID: selfPID)
+            let entries = await operation(applications, selfPID)
             guard let self, self.revision == revision else { return }
             self.snapshot = ProcessQuery.sorted(entries)
+            self.signalledPIDs = []
             self.state = .ready
             self.applyQuery()
             self.sampleTask = nil
+            onLoaded?()
         }
     }
 
@@ -43,6 +61,7 @@ final class KillProcessSession {
         state = .idle
         snapshot = []
         filtered = []
+        signalledPIDs = []
         query = ""
     }
 
@@ -51,9 +70,8 @@ final class KillProcessSession {
         applyQuery()
     }
 
-    func remove(_ pid: Int32) {
-        snapshot.removeAll { $0.pid == pid }
-        applyQuery()
+    func markSignalled(_ pid: Int32) {
+        signalledPIDs.insert(pid)
     }
 
     private func applyQuery() {

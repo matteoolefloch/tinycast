@@ -19,13 +19,16 @@ enum ProcessKiller {
         return .from(killResult: result, errno: errno)
     }
 
-    /// macOS draws the password prompt; the script holds only two integers, so nothing is injectable.
+    /// macOS draws the password prompt; the script carries integers and a vetted stamp, nothing else.
     @concurrent
     static func sendAsAdministrator(
         _ signal: ProcessSignal, to entry: ProcessEntry
     ) async -> AdministratorOutcome {
-        guard ProcessSampler.startTime(of: entry.pid) == entry.startTime else { return .gone }
-        let command = "/bin/kill -\(signal.number) \(entry.pid)"
+        guard ProcessSampler.startTime(of: entry.pid) == entry.startTime,
+            let stamp = launchStamp(of: entry.pid),
+            let command = AdministratorKillCommand.make(
+                signal: signal.number, pid: entry.pid, stamp: stamp)
+        else { return .gone }
         let process = Process()
         let stderr = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
@@ -39,8 +42,27 @@ enum ProcessKiller {
         let data = stderr.fileHandleForReading.readDataToEndOfFile()
         exit.wait()
         guard process.terminationStatus != 0 else { return .signalled }
-        let detail = String(decoding: data, as: UTF8.self)
+        if ProcessSampler.startTime(of: entry.pid) != entry.startTime { return .gone }
+        let detail = (String(bytes: data, encoding: .utf8) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return detail.contains(userCancelledCode) ? .cancelled : .failed(detail)
+        if detail.contains(userCancelledCode) { return .cancelled }
+        return .failed(detail.isEmpty ? String(localized: "The administrator command failed.") : detail)
+    }
+
+    /// `ps`'s own spelling of the start, so the root shell can compare it without parsing a date.
+    private static func launchStamp(of pid: Int32) -> String? {
+        let process = Process()
+        let stdout = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = AdministratorKillCommand.stampArguments + [String(pid)]
+        process.environment = ["LC_ALL": "C"]
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = stdout
+        process.standardError = FileHandle.nullDevice
+        guard let exit = try? process.runObservingExit() else { return nil }
+        let data = stdout.fileHandleForReading.readDataToEndOfFile()
+        exit.wait()
+        guard process.terminationStatus == 0 else { return nil }
+        return (String(bytes: data, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

@@ -21,7 +21,7 @@ struct KillProcessTests {
             isOwnedByUser: true, startTime: 1, bundleURL: nil, iconStamp: 0, isApplication: false)
     }
 
-    static func main() {
+    static func main() async {
         parsing()
         parsingRejects()
         listing()
@@ -30,6 +30,11 @@ struct KillProcessTests {
         ordering()
         ranking()
         outcomes()
+        administratorCommand()
+        await sessionPublishes()
+        await sessionDiscardsStaleSamples()
+        await sessionKeepsSignalledRows()
+        identityGuard()
 
         print(failures == 0 ? "Kill process tests passed" : "\(failures) kill process tests failed")
         exit(failures == 0 ? 0 : 1)
@@ -134,5 +139,110 @@ struct KillProcessTests {
             "anything else is reported as it is")
         expect(ProcessSignal.terminate.number == SIGTERM, "Kill sends SIGTERM")
         expect(ProcessSignal.forceKill.number == SIGKILL, "Force Kill sends SIGKILL")
+    }
+
+    static func administratorCommand() {
+        let command = AdministratorKillCommand.make(
+            signal: SIGKILL, pid: 812, stamp: " Sat Oct 31 10:22:01 2026 ")
+        expect(
+            command
+                == "LC_ALL=C /bin/ps -o lstart= -p 812 | /usr/bin/grep -qF 'Sat Oct 31 10:22:01 2026' && /bin/kill -9 812",
+            "the root line re-checks the stamp before it kills")
+        expect(
+            AdministratorKillCommand.make(signal: SIGTERM, pid: 1, stamp: "Sat' ; rm -rf ~ ; '") == nil,
+            "a stamp that could leave its quotes is refused")
+        expect(
+            AdministratorKillCommand.make(signal: SIGTERM, pid: 1, stamp: "  ") == nil,
+            "an empty stamp is refused")
+    }
+
+    /// Hands each load its own entries after its own delay, so supersession is deterministic.
+    static func session(_ batches: [(delay: Duration, entries: [ProcessEntry])]) -> KillProcessSession {
+        let queue = BatchQueue(batches)
+        return KillProcessSession { _, _ in
+            let batch = queue.next()
+            // Detached, so a superseding load's cancel cannot cut the delay short.
+            await Task.detached { try? await Task.sleep(for: batch.delay) }.value
+            return batch.entries
+        }
+    }
+
+    static func loaded(_ session: KillProcessSession) async {
+        await withCheckedContinuation { continuation in
+            session.load { continuation.resume() }
+        }
+    }
+
+    static func sessionPublishes() async {
+        let session = session([(.zero, [entry(10, cpu: 1), entry(11, cpu: 9)])])
+        await loaded(session)
+        expect(session.state == .ready, "a landed sample is ready")
+        expect(session.filtered.map(\.pid) == [11, 10], "a landed sample is CPU-sorted")
+    }
+
+    static func sessionDiscardsStaleSamples() async {
+        let reset = session([(.milliseconds(50), [entry(10)])])
+        reset.load()
+        reset.reset()
+        try? await Task.sleep(for: .milliseconds(150))
+        expect(reset.snapshot.isEmpty && reset.state == .idle, "a sample landing after a reset is dropped")
+
+        let superseded = session([(.milliseconds(80), [entry(10)]), (.zero, [entry(20)])])
+        superseded.load()
+        try? await Task.sleep(for: .milliseconds(20))
+        await loaded(superseded)
+        try? await Task.sleep(for: .milliseconds(150))
+        expect(superseded.snapshot.map(\.pid) == [20], "an older sample never overwrites a newer one")
+    }
+
+    static func sessionKeepsSignalledRows() async {
+        let session = session([(.zero, [entry(10), entry(11)]), (.zero, [entry(11)])])
+        await loaded(session)
+        session.markSignalled(10)
+        expect(session.filtered.map(\.pid) == [10, 11], "a killed row stays, so the next row never slides up")
+        expect(session.signalledPIDs == [10], "the killed row is marked")
+        await loaded(session)
+        expect(session.signalledPIDs.isEmpty, "a fresh sample clears the marks")
+    }
+
+    /// Signals only a child this harness started, so nothing the machine shares is touched.
+    static func identityGuard() {
+        let child = Process()
+        child.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        child.arguments = ["30"]
+        guard (try? child.run()) != nil, let started = ProcessSampler.startTime(of: child.processIdentifier)
+        else {
+            expect(false, "the harness could start its own child")
+            return
+        }
+        func target(startTime: Int64) -> ProcessEntry {
+            ProcessEntry(
+                pid: child.processIdentifier, name: "sleep", path: "/bin/sleep", cpuPercent: 0,
+                memoryBytes: 0, isOwnedByUser: true, startTime: startTime, bundleURL: nil, iconStamp: 0,
+                isApplication: false)
+        }
+        expect(
+            ProcessKiller.send(.terminate, to: target(startTime: started - 1)) == .gone,
+            "a PID whose start stamp moved is treated as gone")
+        expect(child.isRunning, "and it is never signalled")
+        expect(
+            ProcessKiller.send(.terminate, to: target(startTime: started)) == .signalled,
+            "a match is signalled")
+        child.waitUntilExit()
+        expect(child.terminationReason == .uncaughtSignal, "SIGTERM ended the child")
+        expect(
+            ProcessKiller.send(.terminate, to: target(startTime: started)) == .gone, "an exited PID is gone")
+    }
+}
+
+/// Batches handed out in load order; locked because the operations run off the main actor.
+final class BatchQueue: @unchecked Sendable {
+    private let lock = NSLock()
+    private var batches: [(delay: Duration, entries: [ProcessEntry])]
+
+    init(_ batches: [(delay: Duration, entries: [ProcessEntry])]) { self.batches = batches }
+
+    func next() -> (delay: Duration, entries: [ProcessEntry]) {
+        lock.withLock { batches.isEmpty ? (.zero, []) : batches.removeFirst() }
     }
 }

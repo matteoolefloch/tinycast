@@ -4,6 +4,7 @@ struct KillProcessList: View {
 
     @Environment(\.metrics) private var metrics
     let entries: [ProcessEntry]
+    let signalledPIDs: Set<Int32>
     let selectedID: ProcessEntry.ID?
     let scroll: ScrollIntent
     let onActivate: (ProcessEntry) -> Void
@@ -17,10 +18,13 @@ struct KillProcessList: View {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(entries) { entry in
-                        KillProcessRow(entry: entry, selected: entry.id == selectedID)
-                            .selectionFrame(entry.id == selectedID)
-                            .contentShape(Rectangle())
-                            .onTapGesture { onActivate(entry) }
+                        KillProcessRow(
+                            entry: entry, signalled: signalledPIDs.contains(entry.pid),
+                            selected: entry.id == selectedID
+                        )
+                        .selectionFrame(entry.id == selectedID)
+                        .contentShape(Rectangle())
+                        .onTapGesture { onActivate(entry) }
                     }
                 }
                 .padding(.horizontal, metrics.spacing.md)
@@ -40,6 +44,7 @@ private struct KillProcessRow: View {
 
     @Environment(\.metrics) private var metrics
     let entry: ProcessEntry
+    let signalled: Bool
     let selected: Bool
     @State private var hovered = false
 
@@ -90,6 +95,7 @@ private struct KillProcessRow: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
+        .opacity(signalled ? 0.5 : 1)
         .padding(.horizontal, metrics.spacing.md)
         .padding(.vertical, metrics.spacing.sm)
         .background(

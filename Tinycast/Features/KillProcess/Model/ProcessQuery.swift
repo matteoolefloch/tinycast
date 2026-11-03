@@ -17,7 +17,7 @@ enum ProcessQuery {
     /// A typed number finds its PID first; ties keep the CPU order the snapshot arrived in.
     static func rank(_ entries: [ProcessEntry], for query: String) -> [ProcessEntry] {
         let folded = FuzzyMatch.Query(query)
-        guard !folded.isEmpty else { return Array(entries.prefix(resultLimit)) }
+        guard !folded.isEmpty else { return entries }
         let pid = Int32(query)
         return entries.enumerated()
             .compactMap { position, entry -> (ProcessEntry, Int, Int)? in

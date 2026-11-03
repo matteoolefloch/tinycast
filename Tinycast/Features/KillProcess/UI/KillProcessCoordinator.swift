@@ -3,11 +3,16 @@ import AppKit
 @MainActor
 final class KillProcessCoordinator {
     private let session: KillProcessSession
+    private let palette: PaletteState
     private let paletteCoordinator: PaletteCoordinator
     private unowned let core: AppCore
 
-    init(session: KillProcessSession, paletteCoordinator: PaletteCoordinator, core: AppCore) {
+    init(
+        session: KillProcessSession, palette: PaletteState, paletteCoordinator: PaletteCoordinator,
+        core: AppCore
+    ) {
         self.session = session
+        self.palette = palette
         self.paletteCoordinator = paletteCoordinator
         self.core = core
     }
@@ -21,20 +26,46 @@ final class KillProcessCoordinator {
         session.load()
     }
 
+    /// Fresh CPU figures reorder the rows, so the highlight follows its process, not its index.
+    func reload() {
+        let rows = session.filtered
+        let selectedPID = rows.indices.contains(palette.selection) ? rows[palette.selection].pid : nil
+        session.load { [weak self] in self?.reselect(selectedPID) }
+    }
+
+    private func reselect(_ pid: Int32?) {
+        guard paletteCoordinator.isShowing(.killProcess) else { return }
+        palette.selection = session.filtered.firstIndex { $0.pid == pid } ?? 0
+        palette.followToken = UUID()
+    }
+
     /// The palette stays up after a kill, so a runaway family can be cleared one row at a time.
     func kill(_ entry: ProcessEntry, with signal: ProcessSignal) {
+        if signal == .terminate, entry.isApplication, quitGracefully(entry) {
+            session.markSignalled(entry.pid)
+            core.showMessage(String(localized: "Asked \(entry.name) to quit"))
+            return
+        }
         switch ProcessKiller.send(signal, to: entry) {
         case .signalled:
-            session.remove(entry.pid)
+            session.markSignalled(entry.pid)
             core.showMessage(String(localized: "Killed \(entry.name)"))
         case .gone:
-            session.remove(entry.pid)
+            session.markSignalled(entry.pid)
             core.showMessage(String(localized: "\(entry.name) is no longer running"), tone: .neutral)
         case .notPermitted:
             Task { await self.killAsAdministrator(entry, with: signal) }
         case .failed(let code):
             Task { await self.reportFailure(entry, detail: String(cString: strerror(code))) }
         }
+    }
+
+    /// SIGTERM kills a Cocoa app outright; its own Quit still offers to save open documents.
+    private func quitGracefully(_ entry: ProcessEntry) -> Bool {
+        guard ProcessSampler.startTime(of: entry.pid) == entry.startTime,
+            let app = NSRunningApplication(processIdentifier: entry.pid)
+        else { return false }
+        return app.terminate()
     }
 
     func copyName(_ entry: ProcessEntry) {
@@ -75,10 +106,10 @@ final class KillProcessCoordinator {
         guard confirmed else { return }
         switch await ProcessKiller.sendAsAdministrator(signal, to: entry) {
         case .signalled:
-            session.remove(entry.pid)
+            session.markSignalled(entry.pid)
             core.showMessage(String(localized: "Killed \(entry.name)"))
         case .gone:
-            session.remove(entry.pid)
+            session.markSignalled(entry.pid)
             core.showMessage(String(localized: "\(entry.name) is no longer running"), tone: .neutral)
         case .cancelled:
             break

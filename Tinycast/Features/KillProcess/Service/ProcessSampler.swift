@@ -1,8 +1,7 @@
 import Darwin
 import Foundation
 
-/// One pass over every process. `ps` is setuid, so it reads CPU and memory of other users' processes
-/// that `proc_pidinfo` would refuse; the kernel supplies the path and the start stamp.
+/// One pass over every process: `ps` is setuid, so it sees other users' CPU and memory.
 enum ProcessSampler {
     /// What `NSRunningApplication` knows, read on the main actor and handed in.
     struct Application: Sendable {
@@ -57,7 +56,7 @@ enum ProcessSampler {
         var buffer = [UInt8](repeating: 0, count: 4 * Int(MAXPATHLEN))
         let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
         guard length > 0 else { return nil }
-        return String(decoding: buffer.prefix(Int(length)), as: UTF8.self)
+        return String(bytes: buffer.prefix(Int(length)), encoding: .utf8)
     }
 
     /// Read before the wait: the listing outgrows a pipe's buffer, which would stall `ps` mid-write.
@@ -74,6 +73,6 @@ enum ProcessSampler {
         let data = stdout.fileHandleForReading.readDataToEndOfFile()
         exit.wait()
         guard process.terminationStatus == 0 else { return nil }
-        return String(decoding: data, as: UTF8.self)
+        return (String(bytes: data, encoding: .utf8) ?? "")
     }
 }

@@ -112,7 +112,7 @@ If a change touches anything in the right column, the harness on the left is man
 | `file-index-test` | `FileIndexCrawler`, `FileIndexSnapshot`, `FileIndex`: a real fixture crawled, written, mapped, searched and live-updated |
 | `file-search-session-test` | serialized query execution, coalescing, cancellation and refresh |
 | `menu-search-test` | `MenuSearch/Model/` decisions, `MenuSearch/Service/` session filtering, the shared `FuzzyMatch` scorer |
-| `kill-process-test` | `KillProcess/Model/`: the `ps` parser, the listing rule, bundle and name derivation, order, ranking, kill outcomes |
+| `kill-process-test` | `KillProcess/Model/`: the `ps` parser, listing, naming, order, ranking, kill outcomes, the root command; the session's supersession and the start-stamp guard on its own child |
 | `action-menu-search-test` | Action-menu query normalization and shared fuzzy matching |
 | `app-installation-test` | Multiple app copies and app-wide preferences; file-favorite persistence, mixed ordering, hidden slots and restoration through the existing favorite key list |
 | `ranking-test` | `Launcher/Model/LauncherRankingStore.swift` |

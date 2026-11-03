@@ -11,19 +11,25 @@ kill re-proves the process's identity before it signals.
   (`kinfo_proc.p_starttime`), and `ProcessKiller` re-reads it immediately before `kill(2)`. A PID that
   exited, or that the kernel has handed to a new process since the sample, reports `.gone` and is
   never signalled.
-- **The snapshot never reorders on its own.** The palette's selection is an index into
+- **The snapshot never reorders under the selection.** The palette's selection is an index into
   `session.filtered`, so a timer-driven refresh would slide a different process under ↵. A reload
-  happens only on open and on ⌘R; a kill removes its own row and nothing else.
+  happens only on open and on ⌘R, and ⌘R puts the highlight back on the same PID. A kill never
+  removes its row: `signalledPIDs` dims it in place, so a repeated ↵ lands on the same, now ended,
+  process instead of the one below it.
 - **The kernel, `launchd` and Tinycast are never listed.** `ProcessListParser.isListed` drops PID 0,
   PID 1 and the running PID, so none of them can be selected, let alone signalled.
 - **Privilege is escalated only on request, through macOS's own prompt.** A process another user owns
   answers `EPERM`; the coordinator then asks through `DialogController` whether to kill it as an
   administrator, and only a yes runs `osascript … with administrator privileges`, whose password
-  prompt macOS draws. The script carries two integers — the signal number and the PID — so nothing a
-  process controls (its name, its path) ever reaches a shell.
-- **↵ asks, ⌘↵ insists.** `Kill Process` sends `SIGTERM`, which a process may catch to clean up or
-  refuse; `Force Kill Process` sends `SIGKILL`, which it cannot. Neither confirms first, matching
-  Raycast: the identity check above is what makes a mistaken kill impossible, not a dialog.
+  prompt macOS draws. The prompt can outlast the process, so the root line built by
+  `AdministratorKillCommand` re-checks `ps`'s `lstart` stamp itself before it kills. It carries two
+  integers and that stamp, vetted to letters, digits, colons and spaces, so nothing a process
+  controls (its name, its path) ever reaches a shell.
+- **↵ asks, ⌘↵ insists.** `Kill Process` asks a Dock app to quit through `NSRunningApplication.terminate()`,
+  so unsaved documents still get their save sheet, and sends any other process `SIGTERM`, which it
+  may catch to clean up or refuse; `Force Kill Process` sends `SIGKILL`, which nothing can catch.
+  Neither confirms first, matching Raycast: the identity check above is what makes a mistaken kill
+  impossible, not a dialog.
 - **The palette stays up after a kill**, so a family of helpers can be cleared one row at a time;
   a HUD reports each result.
 - **Sampling runs off-main and holds no actor state.** `ProcessSampler.sample` is `@concurrent`;
@@ -37,6 +43,7 @@ kill re-proves the process's identity before it signals.
 | `Model/ProcessListParser.swift` | the `ps` arguments, the line parser and the listing rule |
 | `Model/ProcessQuery.swift` | the empty-query order (CPU, then memory, then name) and ranking |
 | `Model/ProcessKillOutcome.swift` | `kill(2)`'s answer as a case, and the two signals |
+| `Model/AdministratorKillCommand.swift` | the root shell line and the stamp vetting it relies on |
 | `Service/ProcessSampler.swift` | **Impure.** runs `ps`, reads `proc_pidpath` and `sysctl(KERN_PROC_PID)` |
 | `Service/ProcessKiller.swift` | **Impure.** `kill(2)`, and the administrator path through `osascript` |
 | `Service/KillProcessSession.swift` | the observable state — sample lifecycle, snapshot, filtered rows |
@@ -59,13 +66,13 @@ and a query that is exactly a PID ranks that process first.
 
 | Action | Key | Effect |
 | --- | --- | --- |
-| Kill Process | ↵ | `SIGTERM` |
+| Kill Process | ↵ | a Dock app's own Quit, otherwise `SIGTERM` |
 | Force Kill Process | ⌘↵ | `SIGKILL` |
 | Copy Name | ⌥⌘C | |
 | Copy Path | ⌃⌘C | |
 | Copy PID | | |
 | Show in Finder | ⌘F | the app bundle when there is one, else the executable |
-| Reload Processes | ⌘R | a fresh sample |
+| Reload Processes | ⌘R | a fresh sample, the highlight kept on its PID |
 
 ## Where it is reachable from
 
